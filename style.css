@@ -218,6 +218,17 @@ input::placeholder{ color:var(--ink-dim); opacity:0.7; }
   border-radius:2px;
 }
 .logout-btn:hover{ color:var(--stamp); }
+.notif-btn{
+  width:100%;
+  margin-top:10px;
+  padding:7px 8px;
+  border:1px dashed var(--stamp);
+  color:var(--stamp);
+  font-size:10.5px;
+  text-align:left;
+  border-radius:2px;
+}
+.notif-btn:hover{ background:rgba(138,47,34,0.08); }
 
 .sidebar-tabs{
   display:flex;
