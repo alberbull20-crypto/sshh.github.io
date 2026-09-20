@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>SSHH 👻</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>👻</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Special+Elite&family=Courier+Prime:wght@400;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css" />
+</head>
+<body class="chat-body">
+
+  <div class="app">
+
+    <!-- SIDEBAR -->
+    <aside class="sidebar">
+      <div class="sidebar-top">
+        <div class="brand"><span class="brand-mark">👻</span><span>SSHH</span></div>
+        <div class="me">
+          <span id="meName" class="me-name"></span>
+          <button id="logoutBtn" class="logout-btn" title="leave">↪</button>
+        </div>
+      </div>
+
+      <div class="sidebar-tabs">
+        <button class="tab-btn active" data-tab="chats">open cases</button>
+        <button class="tab-btn" data-tab="people">subjects</button>
+      </div>
+
+      <!-- chats tab: DMs + groups you're in -->
+      <div id="tabChats" class="tab-panel active">
+        <div class="panel-head">
+          <span>case log</span>
+          <button id="newGroupBtn" class="mini-btn">+ new case</button>
+        </div>
+        <ul id="chatList" class="list"></ul>
+      </div>
+
+      <!-- people tab: everyone who has ever logged in -->
+      <div id="tabPeople" class="tab-panel">
+        <div class="panel-head"><span>known subjects</span></div>
+        <ul id="peopleList" class="list"></ul>
+      </div>
+    </aside>
+
+    <!-- MAIN CHAT AREA -->
+    <main class="main">
+      <div id="emptyState" class="empty-state">
+        <div class="stamp stamp-noise">NO CASE OPEN</div>
+        <p>pull a name from <b>subjects</b>, or open a case, and start the transmission.</p>
+      </div>
+
+      <div id="chatView" class="chat-view hidden">
+        <header class="chat-header">
+          <div>
+            <div id="chatTitle" class="chat-title"></div>
+            <div id="chatSubtitle" class="chat-subtitle"></div>
+          </div>
+        </header>
+        <div id="messages" class="messages"></div>
+        <form id="messageForm" class="message-form">
+          <input id="messageInput" type="text" placeholder="whisper something…" autocomplete="off" maxlength="1000" />
+          <button type="submit">send</button>
+        </form>
+      </div>
+    </main>
+  </div>
+
+  <!-- NEW GROUP MODAL -->
+  <div id="groupModal" class="modal hidden">
+    <div class="modal-card">
+      <h3>open a new case</h3>
+      <input id="groupNameInput" type="text" placeholder="case name" maxlength="30" />
+      <div id="groupMemberPicker" class="member-picker"></div>
+      <div class="modal-actions">
+        <button id="groupCancelBtn" class="ghost-btn">cancel</button>
+        <button id="groupCreateBtn">create</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-database-compat.js"></script>
+  <script src="firebase-config.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

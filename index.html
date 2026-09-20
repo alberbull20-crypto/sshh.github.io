@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>SSHH 👻</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>👻</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Special+Elite&family=Courier+Prime:wght@400;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css" />
+</head>
+<body class="login-body">
+
+  <div class="login-wrap">
+    <div class="folder-tab">CASE FILE — ACCESS</div>
+    <div class="stamp stamp-classified">CLASSIFIED</div>
+
+    <div class="login-mark">👻</div>
+    <h1 class="login-title">SSHH</h1>
+    <p class="login-sub">this transmission self-destructs into nobody's business</p>
+
+    <form id="loginForm" class="login-form" autocomplete="off">
+      <label for="username" class="login-label">codename — pick one, tell no one</label>
+      <input id="username" type="text" maxlength="20" placeholder="e.g. nyokabi" required />
+      <button type="submit">clear me in →</button>
+      <p id="loginError" class="login-error"></p>
+    </form>
+
+    <p class="login-footnote">no password on file. no record kept anywhere but here. just a codename your contacts will recognize.</p>
+  </div>
+
+  <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-database-compat.js"></script>
+  <script src="firebase-config.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
