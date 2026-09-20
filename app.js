@@ -82,6 +82,73 @@ if (chatList) {
     window.location.href = "index.html";
   });
 
+  /* ---------- notifications ---------- */
+
+  const notifBtn = document.getElementById("notifBtn");
+  const NOTIF_ICON =
+    document.querySelector('link[rel="icon"]')?.href || undefined;
+  const baseTitle = document.title;
+  let unreadCount = 0;
+
+  if ("Notification" in window) {
+    if (Notification.permission === "default") notifBtn.classList.remove("hidden");
+    notifBtn.addEventListener("click", () => {
+      Notification.requestPermission().then(() => notifBtn.classList.add("hidden"));
+    });
+  } else {
+    notifBtn.classList.add("hidden");
+  }
+
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") {
+      unreadCount = 0;
+      document.title = baseTitle;
+    }
+  });
+
+  function playPing() {
+    try {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
+      o.type = "sine";
+      o.frequency.value = 880;
+      g.gain.setValueAtTime(0.15, ctx.currentTime);
+      g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
+      o.connect(g);
+      g.connect(ctx.destination);
+      o.start();
+      o.stop(ctx.currentTime + 0.4);
+    } catch (e) {
+      /* ignore — some browsers block audio before any user interaction */
+    }
+  }
+
+  function notifyNewMessage(chatId, meta) {
+    const isViewingThis =
+      currentChatId === chatId && document.visibilityState === "visible";
+    if (isViewingThis) return;
+
+    playPing();
+
+    if (document.visibilityState === "hidden") {
+      unreadCount++;
+      document.title = `(${unreadCount}) ${baseTitle}`;
+    }
+
+    if ("Notification" in window && Notification.permission === "granted") {
+      const n = new Notification(meta.name, {
+        body: meta.lastMessage || "new message",
+        icon: NOTIF_ICON,
+      });
+      n.onclick = () => {
+        window.focus();
+        openChat(chatId, meta.type, meta.name);
+        n.close();
+      };
+    }
+  }
+
   /* ---------- tabs ---------- */
 
   const tabBtns = document.querySelectorAll(".tab-btn");
@@ -141,11 +208,29 @@ if (chatList) {
 
   /* ---------- conversations list (chats you're already in) ---------- */
 
+  let prevConvoTs = {};
+  let convoListenerInitialized = false;
+
   db.ref("conversations/" + ME).on("value", (snap) => {
     const convos = snap.val() || {};
     const entries = Object.entries(convos).sort(
       (a, b) => (b[1].lastTs || 0) - (a[1].lastTs || 0)
     );
+
+    // fire notifications for messages that arrived since we last saw this list
+    // (skipped on the very first load so old history doesn't all "notify" at once)
+    if (convoListenerInitialized) {
+      entries.forEach(([chatId, meta]) => {
+        const prevTs = prevConvoTs[chatId] || 0;
+        const isNew = meta.lastTs && meta.lastTs > prevTs;
+        const fromSomeoneElse = meta.lastSender && meta.lastSender !== ME;
+        if (isNew && fromSomeoneElse) notifyNewMessage(chatId, meta);
+      });
+    }
+    convoListenerInitialized = true;
+    entries.forEach(([chatId, meta]) => {
+      prevConvoTs[chatId] = meta.lastTs || 0;
+    });
 
     chatList.innerHTML = "";
     if (entries.length === 0) {
@@ -279,10 +364,12 @@ if (chatList) {
       db.ref("conversations/" + ME + "/" + currentChatId).update({
         lastMessage: preview,
         lastTs: ts,
+        lastSender: ME,
       });
       db.ref("conversations/" + other + "/" + currentChatId).update({
         lastMessage: preview,
         lastTs: ts,
+        lastSender: ME,
         type: "dm",
         name: ME,
       });
@@ -293,6 +380,7 @@ if (chatList) {
           db.ref("conversations/" + m + "/" + currentChatId).update({
             lastMessage: preview,
             lastTs: ts,
+            lastSender: ME,
           });
         });
       });
