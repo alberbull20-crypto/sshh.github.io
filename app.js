@@ -213,6 +213,7 @@ if (chatList) {
     chatView.classList.remove("hidden");
     chatTitle.textContent = (type === "group" ? "☍ " : "") + name;
     chatSubtitle.textContent = type === "group" ? "group chat" : "direct whisper";
+    document.querySelector(".app").classList.add("chat-open"); // mobile: slide into chat view
 
     document
       .querySelectorAll("#chatList .list-item")
@@ -233,6 +234,11 @@ if (chatList) {
     ref.on("value", handler);
     messagesUnsub = () => ref.off("value", handler);
   }
+
+  // mobile: back button returns to the list without closing the chat
+  document.getElementById("backBtn").addEventListener("click", () => {
+    document.querySelector(".app").classList.remove("chat-open");
+  });
 
   function renderMessage(msg) {
     const div = document.createElement("div");
