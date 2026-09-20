@@ -339,6 +339,17 @@ input::placeholder{ color:var(--ink-dim); opacity:0.7; }
   padding:16px 24px;
   border-bottom:1px solid var(--line);
   background:var(--paper-alt);
+  display:flex;
+  align-items:center;
+  gap:12px;
+}
+.back-btn{
+  display:none; /* shown only on mobile, see media query below */
+  color:var(--stamp);
+  font-size:12px;
+  text-transform:uppercase;
+  letter-spacing:0.5px;
+  white-space:nowrap;
 }
 .chat-title{ font-family:"Special Elite", monospace; font-size:16px; color:var(--ink); }
 .chat-subtitle{ font-size:10.5px; color:var(--ink-dim); margin-top:3px; text-transform:uppercase; letter-spacing:0.5px; }
@@ -464,7 +475,15 @@ input::placeholder{ color:var(--ink-dim); opacity:0.7; }
 
 @media (max-width: 720px){
   .app{ grid-template-columns:1fr; }
-  .sidebar{ display:none; }
-  .app.show-sidebar .sidebar{ display:flex; position:fixed; inset:0; z-index:5; width:100%; }
+
+  /* mobile default: show the list, hide the chat panel */
+  .main{ display:none; }
+  .sidebar{ display:flex; }
+
+  /* once a chat is opened, flip it: hide the list, show the chat */
+  .app.chat-open .sidebar{ display:none; }
+  .app.chat-open .main{ display:flex; }
+
+  .back-btn{ display:inline-block; }
   .msg{ max-width:80%; }
 }
