@@ -60,12 +60,32 @@
             <div id="chatTitle" class="chat-title"></div>
             <div id="chatSubtitle" class="chat-subtitle"></div>
           </div>
+          <button id="searchToggleBtn" class="mini-btn" title="search this conversation">🔍</button>
           <button id="manageGroupBtn" class="mini-btn hidden">members</button>
         </header>
+
+        <div id="searchBar" class="search-bar hidden">
+          <input id="searchInput" type="text" placeholder="search this conversation…" autocomplete="off" />
+          <button id="searchCloseBtn" class="ghost-btn">✕</button>
+        </div>
+
         <div id="messages" class="messages"></div>
         <div id="typingIndicator" class="typing-indicator hidden"></div>
+
+        <div id="replyPreview" class="reply-preview hidden">
+          <div class="reply-preview-text">
+            <span id="replyPreviewSender" class="reply-preview-sender"></span>
+            <span id="replyPreviewText"></span>
+          </div>
+          <button id="replyCancelBtn" class="ghost-btn">✕</button>
+        </div>
+
+        <div id="emojiRow" class="emoji-row hidden"></div>
+
         <form id="messageForm" class="message-form">
+          <button type="button" id="emojiToggleBtn" class="emoji-toggle-btn" title="emoji">😀</button>
           <input id="messageInput" type="text" placeholder="whisper something…" autocomplete="off" maxlength="1000" />
+          <span id="charCounter" class="char-counter hidden"></span>
           <button type="submit">send</button>
         </form>
       </div>
@@ -90,6 +110,11 @@
     <div class="modal-card">
       <h3 id="manageModalTitle">case members</h3>
       <div id="manageMemberList" class="member-picker"></div>
+
+      <div class="panel-head no-pad"><span>add someone</span></div>
+      <div id="addMemberPicker" class="member-picker"></div>
+      <button id="addMembersBtn" class="mini-btn add-members-btn">+ add selected</button>
+
       <div class="modal-actions">
         <button id="manageCancelBtn" class="ghost-btn">close</button>
         <button id="leaveGroupBtn" class="stamp-btn danger-btn">leave case</button>
