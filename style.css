@@ -365,6 +365,50 @@ input::placeholder{ color:var(--ink-dim); opacity:0.7; }
 }
 .chat-title{ font-family:"Special Elite", monospace; font-size:16px; color:var(--ink); }
 .chat-subtitle{ font-size:10.5px; color:var(--ink-dim); margin-top:3px; text-transform:uppercase; letter-spacing:0.5px; }
+.chat-header-text{ flex:1; min-width:0; }
+.danger-btn{ border-color:var(--stamp) !important; }
+
+.typing-indicator{
+  padding:2px 24px 6px;
+  font-size:11px;
+  font-style:italic;
+  color:var(--ink-dim);
+  min-height:18px;
+}
+
+.date-divider{
+  align-self:center;
+  font-size:10px;
+  text-transform:uppercase;
+  letter-spacing:1.5px;
+  color:var(--ink-dim);
+  background:var(--paper-alt);
+  border:1px solid var(--line);
+  padding:3px 12px;
+  border-radius:10px;
+  margin:6px 0;
+}
+
+.msg-delete{
+  position:absolute;
+  top:2px; right:6px;
+  font-size:12px;
+  color:var(--ink-dim);
+  opacity:0;
+  transition:opacity .1s ease;
+  padding:2px 4px;
+}
+.msg.mine{ padding-right:26px; }
+.msg.mine:hover .msg-delete{ opacity:0.8; }
+.msg-delete:hover{ color:var(--stamp); }
+
+.member-row-remove{
+  margin-left:auto;
+  color:var(--ink-dim);
+  font-size:11px;
+  padding:2px 6px;
+}
+.member-row-remove:hover{ color:var(--stamp); }
 
 .messages{
   flex:1;
@@ -386,6 +430,7 @@ input::placeholder{ color:var(--ink-dim); opacity:0.7; }
   line-height:1.5;
   word-wrap:break-word;
 }
+.messages{ position:relative; }
 .msg::before{
   content:"";
   position:absolute;
