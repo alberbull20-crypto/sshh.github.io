@@ -36,6 +36,20 @@ function initials(name) {
   return name.trim().slice(0, 2).toUpperCase();
 }
 
+function escapeHtml(str) {
+  const d = document.createElement("div");
+  d.textContent = str;
+  return d.innerHTML;
+}
+
+function linkify(escapedText) {
+  const urlRegex = /(https?:\/\/[^\s<]+)/g;
+  return escapedText.replace(
+    urlRegex,
+    (url) => `<a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a>`
+  );
+}
+
 /* ==========================================================
    LOGIN PAGE
    ========================================================== */
@@ -85,6 +99,38 @@ if (chatList) {
 
   document.getElementById("meName").textContent = ME;
 
+  /* ---------- state ---------- */
+
+  let currentChatId = null;
+  let currentChatMeta = null; // { type, name }
+  let messagesUnsub = null;
+  let typingUnsub = null;
+  let typingTimeout = null;
+  let readsUnsub = null;
+  let lastOtherReadTs = 0;
+  let replyingTo = null; // { sender, text }
+  let searchQuery = "";
+
+  const emptyState = document.getElementById("emptyState");
+  const chatView = document.getElementById("chatView");
+  const chatTitle = document.getElementById("chatTitle");
+  const chatSubtitle = document.getElementById("chatSubtitle");
+  const messagesEl = document.getElementById("messages");
+  const manageGroupBtn = document.getElementById("manageGroupBtn");
+  const typingIndicator = document.getElementById("typingIndicator");
+  const messageInput = document.getElementById("messageInput");
+  const charCounter = document.getElementById("charCounter");
+  const searchToggleBtn = document.getElementById("searchToggleBtn");
+  const searchBar = document.getElementById("searchBar");
+  const searchInput = document.getElementById("searchInput");
+  const searchCloseBtn = document.getElementById("searchCloseBtn");
+  const replyPreview = document.getElementById("replyPreview");
+  const replyPreviewSender = document.getElementById("replyPreviewSender");
+  const replyPreviewText = document.getElementById("replyPreviewText");
+  const replyCancelBtn = document.getElementById("replyCancelBtn");
+  const emojiRow = document.getElementById("emojiRow");
+  const emojiToggleBtn = document.getElementById("emojiToggleBtn");
+
   // keep a lightweight presence heartbeat
   db.ref("users/" + ME).update({ lastSeen: Date.now() });
   window.addEventListener("beforeunload", () => {
@@ -100,10 +146,9 @@ if (chatList) {
   /* ---------- notifications ---------- */
 
   const notifBtn = document.getElementById("notifBtn");
-  const NOTIF_ICON =
-    document.querySelector('link[rel="icon"]')?.href || undefined;
+  const NOTIF_ICON = document.querySelector('link[rel="icon"]')?.href || undefined;
   const baseTitle = document.title;
-  let unreadCount = 0;
+  let unreadTitleCount = 0;
 
   if ("Notification" in window) {
     if (Notification.permission === "default") notifBtn.classList.remove("hidden");
@@ -116,7 +161,7 @@ if (chatList) {
 
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "visible") {
-      unreadCount = 0;
+      unreadTitleCount = 0;
       document.title = baseTitle;
     }
   });
@@ -147,8 +192,8 @@ if (chatList) {
     playPing();
 
     if (document.visibilityState === "hidden") {
-      unreadCount++;
-      document.title = `(${unreadCount}) ${baseTitle}`;
+      unreadTitleCount++;
+      document.title = `(${unreadTitleCount}) ${baseTitle}`;
     }
 
     if ("Notification" in window && Notification.permission === "granted") {
@@ -179,22 +224,6 @@ if (chatList) {
       tabPanels[btn.dataset.tab].classList.add("active");
     });
   });
-
-  /* ---------- state ---------- */
-
-  let currentChatId = null;
-  let currentChatMeta = null; // { type, name }
-  let messagesUnsub = null;
-  let typingUnsub = null;
-  let typingTimeout = null;
-
-  const emptyState = document.getElementById("emptyState");
-  const chatView = document.getElementById("chatView");
-  const chatTitle = document.getElementById("chatTitle");
-  const chatSubtitle = document.getElementById("chatSubtitle");
-  const messagesEl = document.getElementById("messages");
-  const manageGroupBtn = document.getElementById("manageGroupBtn");
-  const typingIndicator = document.getElementById("typingIndicator");
 
   /* ---------- people list (everyone who ever logged in) ---------- */
 
@@ -262,14 +291,16 @@ if (chatList) {
       const li = document.createElement("li");
       li.className = "list-item" + (chatId === currentChatId ? " active" : "");
       const isGroup = meta.type === "group";
+      const unread = meta.unread || 0;
       li.innerHTML = `
         <div class="avatar ${isGroup ? "group" : ""}">${
         isGroup ? "☍" : initials(meta.name)
       }</div>
         <div class="item-text">
-          <div class="item-name">${meta.name}</div>
+          <div class="item-name ${unread ? "unread" : ""}">${meta.name}</div>
           <div class="item-sub">${meta.lastMessage || "say hi"}</div>
-        </div>`;
+        </div>
+        ${unread ? `<span class="item-badge">${unread}</span>` : ""}`;
       li.addEventListener("click", () =>
         openChat(chatId, meta.type, meta.name)
       );
@@ -287,6 +318,7 @@ if (chatList) {
         name: otherUser,
         lastMessage: null,
         lastTs: Date.now(),
+        unread: 0,
       },
     };
     const themUpdate = {
@@ -295,6 +327,7 @@ if (chatList) {
         name: ME,
         lastMessage: null,
         lastTs: Date.now(),
+        unread: 0,
       },
     };
     // don't clobber an existing conversation's lastMessage
@@ -320,6 +353,17 @@ if (chatList) {
     document.querySelector(".app").classList.add("chat-open"); // mobile: slide into chat view
 
     manageGroupBtn.classList.toggle("hidden", type !== "group");
+
+    // reset per-chat UI state
+    replyingTo = null;
+    showReplyPreview();
+    searchQuery = "";
+    searchInput.value = "";
+    searchBar.classList.add("hidden");
+    emojiRow.classList.add("hidden");
+
+    // this chat is now open, so its unread count clears
+    db.ref("conversations/" + ME + "/" + chatId + "/unread").set(0);
 
     document
       .querySelectorAll("#chatList .list-item")
@@ -348,12 +392,18 @@ if (chatList) {
         }
         renderMessage(m, chatId);
       });
+      applySearchFilter();
+      applySeenIndicator();
       messagesEl.scrollTop = messagesEl.scrollHeight;
+
+      // viewing this chat marks it read, for the other side's seen receipt
+      if (type === "dm") markRead(chatId);
     };
     ref.on("value", handler);
     messagesUnsub = () => ref.off("value", handler);
 
     listenTyping(chatId);
+    listenReads(chatId, type, name);
   }
 
   // mobile: back button returns to the list without closing the chat
@@ -365,6 +415,9 @@ if (chatList) {
     const div = document.createElement("div");
     const mine = msg.sender === ME;
     div.className = "msg " + (mine ? "mine" : "theirs");
+    div.dataset.text = msg.text.toLowerCase();
+    div.dataset.ts = msg.ts;
+
     div.innerHTML = `
       ${mine ? `<button class="msg-delete" title="delete">✕</button>` : ""}
       ${
@@ -372,37 +425,169 @@ if (chatList) {
           ? `<span class="msg-sender">${msg.sender}</span>`
           : ""
       }
-      ${escapeHtml(msg.text)}
+      ${
+        msg.replyTo
+          ? `<div class="msg-quote"><b>${escapeHtml(msg.replyTo.sender)}</b>: ${escapeHtml(
+              msg.replyTo.text
+            ).slice(0, 80)}</div>`
+          : ""
+      }
+      ${linkify(escapeHtml(msg.text))}
       <span class="msg-time">${fmtTime(msg.ts)}</span>`;
+
     if (mine) {
-      div.querySelector(".msg-delete").addEventListener("click", () => {
+      div.querySelector(".msg-delete").addEventListener("click", (e) => {
+        e.stopPropagation();
         if (confirm("delete this message?")) {
           db.ref("messages/" + chatId + "/" + msg.key).remove();
         }
       });
     }
+
+    // tap a message to quote it in your reply — but not when tapping a link or the delete button
+    div.addEventListener("click", (e) => {
+      if (e.target.tagName === "A" || e.target.classList.contains("msg-delete")) return;
+      replyingTo = { sender: msg.sender, text: msg.text };
+      showReplyPreview();
+    });
+
     messagesEl.appendChild(div);
   }
 
-  function escapeHtml(str) {
-    const d = document.createElement("div");
-    d.textContent = str;
-    return d.innerHTML;
+  /* ---------- message search ---------- */
+
+  searchToggleBtn.addEventListener("click", () => {
+    searchBar.classList.toggle("hidden");
+    if (!searchBar.classList.contains("hidden")) searchInput.focus();
+  });
+
+  searchCloseBtn.addEventListener("click", () => {
+    searchBar.classList.add("hidden");
+    searchInput.value = "";
+    searchQuery = "";
+    applySearchFilter();
+  });
+
+  searchInput.addEventListener("input", () => {
+    searchQuery = searchInput.value.trim().toLowerCase();
+    applySearchFilter();
+  });
+
+  function applySearchFilter() {
+    messagesEl.querySelectorAll(".msg").forEach((el) => {
+      const text = el.dataset.text || "";
+      el.style.display = !searchQuery || text.includes(searchQuery) ? "" : "none";
+    });
+    messagesEl.querySelectorAll(".date-divider").forEach((el) => {
+      el.style.display = searchQuery ? "none" : "";
+    });
+  }
+
+  /* ---------- seen receipts (DMs only) ---------- */
+
+  function markRead(chatId) {
+    db.ref("reads/" + chatId + "/" + ME).set(Date.now());
+  }
+
+  function listenReads(chatId, type, otherName) {
+    if (readsUnsub) readsUnsub();
+    readsUnsub = null;
+    lastOtherReadTs = 0;
+    if (type !== "dm") return;
+
+    const ref = db.ref("reads/" + chatId + "/" + otherName);
+    const handler = (snap) => {
+      lastOtherReadTs = snap.val() || 0;
+      applySeenIndicator();
+    };
+    ref.on("value", handler);
+    readsUnsub = () => ref.off("value", handler);
+  }
+
+  function applySeenIndicator() {
+    if (currentChatMeta?.type !== "dm") return;
+    messagesEl.querySelectorAll(".msg-seen").forEach((el) => el.remove());
+    const mineEls = messagesEl.querySelectorAll(".msg.mine");
+    if (mineEls.length === 0) return;
+    const lastMine = mineEls[mineEls.length - 1];
+    const ts = Number(lastMine.dataset.ts || 0);
+    if (ts > 0 && lastOtherReadTs >= ts) {
+      const span = document.createElement("span");
+      span.className = "msg-seen";
+      span.textContent = "✓ seen";
+      lastMine.querySelector(".msg-time").after(span);
+    }
+  }
+
+  /* ---------- reply-to preview ---------- */
+
+  function showReplyPreview() {
+    if (!replyingTo) {
+      replyPreview.classList.add("hidden");
+      return;
+    }
+    replyPreviewSender.textContent = replyingTo.sender + ": ";
+    replyPreviewText.textContent =
+      replyingTo.text.length > 60 ? replyingTo.text.slice(0, 60) + "…" : replyingTo.text;
+    replyPreview.classList.remove("hidden");
+    messageInput.focus();
+  }
+
+  replyCancelBtn.addEventListener("click", () => {
+    replyingTo = null;
+    showReplyPreview();
+  });
+
+  /* ---------- emoji picker ---------- */
+
+  const EMOJIS = ["😀", "😂", "😍", "😢", "😮", "🙏", "🔥", "🎉", "👍", "👀", "😅", "😭", "💀", "🤔", "❤️", "👻"];
+  emojiRow.innerHTML = EMOJIS.map((e) => `<button type="button">${e}</button>`).join("");
+  emojiRow.querySelectorAll("button").forEach((btn, i) => {
+    btn.addEventListener("click", () => {
+      messageInput.value += EMOJIS[i];
+      messageInput.dispatchEvent(new Event("input"));
+      messageInput.focus();
+    });
+  });
+  emojiToggleBtn.addEventListener("click", () => emojiRow.classList.toggle("hidden"));
+
+  /* ---------- character counter ---------- */
+
+  messageInput.addEventListener("input", () => {
+    const remaining = 1000 - messageInput.value.length;
+    if (remaining <= 100) {
+      charCounter.textContent = `${remaining} left`;
+      charCounter.classList.remove("hidden");
+    } else {
+      charCounter.classList.add("hidden");
+    }
+  });
+
+  /* ---------- unread badges: bump the other side's counter ---------- */
+
+  function bumpUnread(username, chatId) {
+    db.ref("conversations/" + username + "/" + chatId + "/unread").transaction(
+      (cur) => (cur || 0) + 1
+    );
   }
 
   /* ---------- sending ---------- */
 
   document.getElementById("messageForm").addEventListener("submit", (e) => {
     e.preventDefault();
-    const input = document.getElementById("messageInput");
-    const text = input.value.trim();
+    const text = messageInput.value.trim();
     if (!text || !currentChatId) return;
 
     const ts = Date.now();
-    db.ref("messages/" + currentChatId).push({ sender: ME, text, ts });
-    clearTyping();
+    const payload = { sender: ME, text, ts };
+    if (replyingTo) payload.replyTo = { sender: replyingTo.sender, text: replyingTo.text };
 
-    // update conversation previews for everyone involved
+    db.ref("messages/" + currentChatId).push(payload);
+    clearTyping();
+    replyingTo = null;
+    showReplyPreview();
+
+    // update conversation previews + unread counters for everyone involved
     const preview = text.length > 40 ? text.slice(0, 40) + "…" : text;
     if (currentChatMeta.type === "dm") {
       const other = currentChatMeta.name;
@@ -418,6 +603,7 @@ if (chatList) {
         type: "dm",
         name: ME,
       });
+      bumpUnread(other, currentChatId);
     } else {
       db.ref("groups/" + currentChatId + "/members").once("value", (snap) => {
         const members = Object.keys(snap.val() || {});
@@ -427,11 +613,13 @@ if (chatList) {
             lastTs: ts,
             lastSender: ME,
           });
+          if (m !== ME) bumpUnread(m, currentChatId);
         });
       });
     }
 
-    input.value = "";
+    messageInput.value = "";
+    charCounter.classList.add("hidden");
   });
 
   /* ---------- typing indicator ---------- */
@@ -441,7 +629,7 @@ if (chatList) {
     if (currentChatId) db.ref("typing/" + currentChatId + "/" + ME).remove();
   }
 
-  document.getElementById("messageInput").addEventListener("input", () => {
+  messageInput.addEventListener("input", () => {
     if (!currentChatId) return;
     db.ref("typing/" + currentChatId + "/" + ME).set(true);
     clearTimeout(typingTimeout);
@@ -525,8 +713,9 @@ if (chatList) {
       db.ref("conversations/" + u + "/" + groupId).set({
         type: "group",
         name,
-        lastMessage: "group created",
+        lastMessage: "case created",
         lastTs: Date.now(),
+        unread: 0,
       });
     });
 
@@ -534,11 +723,13 @@ if (chatList) {
     openChat(groupId, "group", name);
   });
 
-  /* ---------- manage group: view members, remove (creator only), leave ---------- */
+  /* ---------- manage group: view members, add, remove (creator only), leave ---------- */
 
   const manageModal = document.getElementById("manageModal");
   const manageModalTitle = document.getElementById("manageModalTitle");
   const manageMemberList = document.getElementById("manageMemberList");
+  const addMemberPicker = document.getElementById("addMemberPicker");
+  const addMembersBtn = document.getElementById("addMembersBtn");
   const leaveGroupBtn = document.getElementById("leaveGroupBtn");
 
   function renderManageModal(groupId) {
@@ -566,11 +757,52 @@ if (chatList) {
           if (!confirm(`remove ${user} from this case?`)) return;
           db.ref("groups/" + groupId + "/members/" + user).remove();
           db.ref("conversations/" + user + "/" + groupId).remove();
-          renderManageModal(groupId); // refresh the list in place
+          renderManageModal(groupId); // refresh in place
         });
+      });
+
+      // who's not in the group yet, to offer adding them
+      db.ref("users").once("value", (usnap) => {
+        const allUsers = Object.keys(usnap.val() || {});
+        const nonMembers = allUsers.filter((u) => !group.members[u]);
+        addMemberPicker.innerHTML = nonMembers.length
+          ? nonMembers
+              .map(
+                (u) => `
+          <label class="member-row">
+            <input type="checkbox" value="${u}" />
+            ${u}
+          </label>`
+              )
+              .join("")
+          : '<p class="list-empty">everyone\u2019s already in.</p>';
       });
     });
   }
+
+  addMembersBtn.addEventListener("click", () => {
+    if (!currentChatId) return;
+    const checked = Array.from(
+      addMemberPicker.querySelectorAll("input:checked")
+    ).map((cb) => cb.value);
+    if (checked.length === 0) return;
+
+    const groupId = currentChatId;
+    db.ref("groups/" + groupId + "/name").once("value", (snap) => {
+      const groupName = snap.val();
+      checked.forEach((u) => {
+        db.ref("groups/" + groupId + "/members/" + u).set(true);
+        db.ref("conversations/" + u + "/" + groupId).set({
+          type: "group",
+          name: groupName,
+          lastMessage: "added to the case",
+          lastTs: Date.now(),
+          unread: 0,
+        });
+      });
+      renderManageModal(groupId);
+    });
+  });
 
   manageGroupBtn.addEventListener("click", () => {
     if (!currentChatId || currentChatMeta.type !== "group") return;
