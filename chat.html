@@ -56,12 +56,14 @@
       <div id="chatView" class="chat-view hidden">
         <header class="chat-header">
           <button id="backBtn" class="back-btn" title="back to list">← back</button>
-          <div>
+          <div class="chat-header-text">
             <div id="chatTitle" class="chat-title"></div>
             <div id="chatSubtitle" class="chat-subtitle"></div>
           </div>
+          <button id="manageGroupBtn" class="mini-btn hidden">members</button>
         </header>
         <div id="messages" class="messages"></div>
+        <div id="typingIndicator" class="typing-indicator hidden"></div>
         <form id="messageForm" class="message-form">
           <input id="messageInput" type="text" placeholder="whisper something…" autocomplete="off" maxlength="1000" />
           <button type="submit">send</button>
@@ -79,6 +81,18 @@
       <div class="modal-actions">
         <button id="groupCancelBtn" class="ghost-btn">cancel</button>
         <button id="groupCreateBtn">create</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MANAGE GROUP MODAL -->
+  <div id="manageModal" class="modal hidden">
+    <div class="modal-card">
+      <h3 id="manageModalTitle">case members</h3>
+      <div id="manageMemberList" class="member-picker"></div>
+      <div class="modal-actions">
+        <button id="manageCancelBtn" class="ghost-btn">close</button>
+        <button id="leaveGroupBtn" class="stamp-btn danger-btn">leave case</button>
       </div>
     </div>
   </div>
