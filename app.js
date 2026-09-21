@@ -18,6 +18,20 @@ function fmtTime(ts) {
   return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
+function dayLabel(ts) {
+  const d = new Date(ts);
+  const today = new Date();
+  const yesterday = new Date();
+  yesterday.setDate(today.getDate() - 1);
+  const sameDay = (a, b) =>
+    a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate();
+  if (sameDay(d, today)) return "Today";
+  if (sameDay(d, yesterday)) return "Yesterday";
+  return d.toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" });
+}
+
 function initials(name) {
   return name.trim().slice(0, 2).toUpperCase();
 }
@@ -75,6 +89,7 @@ if (chatList) {
   db.ref("users/" + ME).update({ lastSeen: Date.now() });
   window.addEventListener("beforeunload", () => {
     db.ref("users/" + ME).update({ lastSeen: Date.now() });
+    if (currentChatId) db.ref("typing/" + currentChatId + "/" + ME).remove();
   });
 
   document.getElementById("logoutBtn").addEventListener("click", () => {
@@ -170,12 +185,16 @@ if (chatList) {
   let currentChatId = null;
   let currentChatMeta = null; // { type, name }
   let messagesUnsub = null;
+  let typingUnsub = null;
+  let typingTimeout = null;
 
   const emptyState = document.getElementById("emptyState");
   const chatView = document.getElementById("chatView");
   const chatTitle = document.getElementById("chatTitle");
   const chatSubtitle = document.getElementById("chatSubtitle");
   const messagesEl = document.getElementById("messages");
+  const manageGroupBtn = document.getElementById("manageGroupBtn");
+  const typingIndicator = document.getElementById("typingIndicator");
 
   /* ---------- people list (everyone who ever logged in) ---------- */
 
@@ -300,6 +319,8 @@ if (chatList) {
     chatSubtitle.textContent = type === "group" ? "group chat" : "direct whisper";
     document.querySelector(".app").classList.add("chat-open"); // mobile: slide into chat view
 
+    manageGroupBtn.classList.toggle("hidden", type !== "group");
+
     document
       .querySelectorAll("#chatList .list-item")
       .forEach((el) => el.classList.remove("active"));
@@ -310,14 +331,29 @@ if (chatList) {
     const ref = db.ref("messages/" + chatId).limitToLast(200);
     const handler = (snap) => {
       const msgs = snap.val() || {};
+      const list = Object.entries(msgs)
+        .map(([key, m]) => ({ key, ...m }))
+        .sort((a, b) => a.ts - b.ts);
+
       messagesEl.innerHTML = "";
-      Object.values(msgs)
-        .sort((a, b) => a.ts - b.ts)
-        .forEach(renderMessage);
+      let lastDay = null;
+      list.forEach((m) => {
+        const label = dayLabel(m.ts);
+        if (label !== lastDay) {
+          const div = document.createElement("div");
+          div.className = "date-divider";
+          div.textContent = label;
+          messagesEl.appendChild(div);
+          lastDay = label;
+        }
+        renderMessage(m, chatId);
+      });
       messagesEl.scrollTop = messagesEl.scrollHeight;
     };
     ref.on("value", handler);
     messagesUnsub = () => ref.off("value", handler);
+
+    listenTyping(chatId);
   }
 
   // mobile: back button returns to the list without closing the chat
@@ -325,11 +361,12 @@ if (chatList) {
     document.querySelector(".app").classList.remove("chat-open");
   });
 
-  function renderMessage(msg) {
+  function renderMessage(msg, chatId) {
     const div = document.createElement("div");
     const mine = msg.sender === ME;
     div.className = "msg " + (mine ? "mine" : "theirs");
     div.innerHTML = `
+      ${mine ? `<button class="msg-delete" title="delete">✕</button>` : ""}
       ${
         !mine && currentChatMeta.type === "group"
           ? `<span class="msg-sender">${msg.sender}</span>`
@@ -337,6 +374,13 @@ if (chatList) {
       }
       ${escapeHtml(msg.text)}
       <span class="msg-time">${fmtTime(msg.ts)}</span>`;
+    if (mine) {
+      div.querySelector(".msg-delete").addEventListener("click", () => {
+        if (confirm("delete this message?")) {
+          db.ref("messages/" + chatId + "/" + msg.key).remove();
+        }
+      });
+    }
     messagesEl.appendChild(div);
   }
 
@@ -356,6 +400,7 @@ if (chatList) {
 
     const ts = Date.now();
     db.ref("messages/" + currentChatId).push({ sender: ME, text, ts });
+    clearTyping();
 
     // update conversation previews for everyone involved
     const preview = text.length > 40 ? text.slice(0, 40) + "…" : text;
@@ -388,6 +433,44 @@ if (chatList) {
 
     input.value = "";
   });
+
+  /* ---------- typing indicator ---------- */
+
+  function clearTyping() {
+    clearTimeout(typingTimeout);
+    if (currentChatId) db.ref("typing/" + currentChatId + "/" + ME).remove();
+  }
+
+  document.getElementById("messageInput").addEventListener("input", () => {
+    if (!currentChatId) return;
+    db.ref("typing/" + currentChatId + "/" + ME).set(true);
+    clearTimeout(typingTimeout);
+    typingTimeout = setTimeout(clearTyping, 2500);
+  });
+
+  function listenTyping(chatId) {
+    if (typingUnsub) typingUnsub();
+    typingIndicator.classList.add("hidden");
+    typingIndicator.textContent = "";
+
+    const ref = db.ref("typing/" + chatId);
+    const handler = (snap) => {
+      const typing = snap.val() || {};
+      const others = Object.keys(typing).filter((u) => u !== ME && typing[u]);
+      if (others.length === 0) {
+        typingIndicator.classList.add("hidden");
+        typingIndicator.textContent = "";
+      } else {
+        typingIndicator.classList.remove("hidden");
+        typingIndicator.textContent =
+          others.length === 1
+            ? `${others[0]} is typing…`
+            : `${others.join(", ")} are typing…`;
+      }
+    };
+    ref.on("value", handler);
+    typingUnsub = () => ref.off("value", handler);
+  }
 
   /* ---------- group creation ---------- */
 
@@ -449,5 +532,69 @@ if (chatList) {
 
     groupModal.classList.add("hidden");
     openChat(groupId, "group", name);
+  });
+
+  /* ---------- manage group: view members, remove (creator only), leave ---------- */
+
+  const manageModal = document.getElementById("manageModal");
+  const manageModalTitle = document.getElementById("manageModalTitle");
+  const manageMemberList = document.getElementById("manageMemberList");
+  const leaveGroupBtn = document.getElementById("leaveGroupBtn");
+
+  function renderManageModal(groupId) {
+    db.ref("groups/" + groupId).once("value", (snap) => {
+      const group = snap.val();
+      if (!group) return;
+      manageModalTitle.textContent = group.name + " — members";
+      const members = Object.keys(group.members || {});
+      const iAmCreator = group.createdBy === ME;
+
+      manageMemberList.innerHTML = members
+        .map((u) => {
+          const canRemove = iAmCreator && u !== ME;
+          return `
+        <div class="member-row">
+          <span>${u}${u === group.createdBy ? " (creator)" : ""}</span>
+          ${canRemove ? `<button class="member-row-remove" data-user="${u}">remove</button>` : ""}
+        </div>`;
+        })
+        .join("");
+
+      manageMemberList.querySelectorAll(".member-row-remove").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const user = btn.dataset.user;
+          if (!confirm(`remove ${user} from this case?`)) return;
+          db.ref("groups/" + groupId + "/members/" + user).remove();
+          db.ref("conversations/" + user + "/" + groupId).remove();
+          renderManageModal(groupId); // refresh the list in place
+        });
+      });
+    });
+  }
+
+  manageGroupBtn.addEventListener("click", () => {
+    if (!currentChatId || currentChatMeta.type !== "group") return;
+    renderManageModal(currentChatId);
+    manageModal.classList.remove("hidden");
+  });
+
+  document
+    .getElementById("manageCancelBtn")
+    .addEventListener("click", () => manageModal.classList.add("hidden"));
+
+  leaveGroupBtn.addEventListener("click", () => {
+    if (!currentChatId) return;
+    if (!confirm("leave this case? you'll need to be re-added to come back.")) return;
+
+    const groupId = currentChatId;
+    db.ref("groups/" + groupId + "/members/" + ME).remove();
+    db.ref("conversations/" + ME + "/" + groupId).remove();
+
+    manageModal.classList.add("hidden");
+    chatView.classList.add("hidden");
+    emptyState.classList.remove("hidden");
+    document.querySelector(".app").classList.remove("chat-open");
+    currentChatId = null;
+    currentChatMeta = null;
   });
 }
